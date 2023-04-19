@@ -21,4 +21,4 @@ If you post your token by accident, LOGOUT from discord on that **same browser**
 >
 > By using any code or information provided, you agree to all parts of the above Disclaimer.
 
-Last tested: 2023
+Last Tested: April 2023
