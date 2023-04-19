@@ -13,7 +13,7 @@ https://www.python.org/ftp/python/3.7.3/python-3.7.3-amd64.exe
 
 ## DO NOT SHARE THE TOKEN
 
-When you input your token into the josn file, the token will be saved in a text file called token.txt within the folder called "cache" located in the same directory - do not share the text file as it will give full access to your Discord account!
+When you input your token into the josn file, the token will be saved within that file and only that file - do not share the text file as it will give full access to your Discord account!
 If you post your token by accident, LOGOUT from discord on that **same browser** you got that token imediately or change your password.
 
 > **DISCLAIMER:**
