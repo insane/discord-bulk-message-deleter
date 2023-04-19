@@ -1,5 +1,7 @@
 # discord message deleter
 
+discord bulk message deleter with smart ratelimit handling
+
 ## Installation:
 
 Install Python:
