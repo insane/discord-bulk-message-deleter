@@ -10,7 +10,7 @@ with open('config.json', 'r') as f:
 
 client = discord.Client()
 
-ratelimits = []
+ratelimits = {}
 ratelimit_threshold = 3
 
 # Background task to clear the ratelimits table
@@ -26,8 +26,7 @@ async def on_ready():
 
 @client.event
 async def on_message(message):
-
-    if message.content.startswith('cl'):
+    if message.content.strip().lower() == 'cl':
         await message.delete()
 
         deleted = []
@@ -36,32 +35,31 @@ async def on_message(message):
             if m.author == client.user:
                 try:
                     await m.delete()
-                    #print(colored("[DELETED] > Deleted message", 'green'))
                     deleted.append(m)
-                except Exception as e:
-                    if isinstance(e, discord.errors.HTTPException):
-                        if e.status == 429:
-                            ratelimits.append(1)
-                            print(colored(f"[RATELIMIT] > Hit a rate limit! Sleeping for {5 + len(ratelimits) * 5} seconds..", 'yellow'))
-                            await asyncio.sleep(5 + len(ratelimits) * 5)
-                            try:
-                                await m.delete()
-                            except:
-                                continue
+                except discord.errors.HTTPException as e:
+                    if e.status == 429:
+                        ratelimits[message.author.id] = ratelimits.get(message.author.id, 0) + 1
+                        wait_time = 5 + ratelimits[message.author.id] * 5
+                        print(colored(f"[RATELIMIT] > Hit a rate limit! Sleeping for {wait_time} seconds...", 'yellow'))
+                        await asyncio.sleep(wait_time)
+                        try:
+                            await m.delete()
+                        except:
                             continue
-                        
-                    elif isinstance(e, discord.errors.Forbidden):
-                        print(colored("[ERR] > Could not delete message due to permissions error.", 'red'))
                     else:
                         print(colored(f"[ERR] > Unexpected error: {e}", 'red'))
+                except discord.errors.Forbidden:
+                    print(colored("[ERR] > Could not delete message due to permissions error.", 'red'))
+                except Exception as e:
+                    print(colored(f"[ERR] > Unexpected error: {e}", 'red'))
 
         print(colored(f"[DELETED] > Deleted {len(deleted)} message(s)", 'green'))
 
-        if len(ratelimits) >= ratelimit_threshold:
+        if ratelimits.get(message.author.id, 0) >= ratelimit_threshold:
             wait_time = random.choice([5, 10, 15, 20])
             print(colored(f"[RATELIMIT] > Exceeded ratelimit threshold. Sleeping for {wait_time} seconds.", 'yellow'))
             await asyncio.sleep(wait_time)
-            ratelimits.clear()
+            ratelimits.pop(message.author.id, None)
 
 # Start the bot
 client.run(config['token'], bot=False)
