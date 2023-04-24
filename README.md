@@ -11,7 +11,7 @@ https://www.python.org/ftp/python/3.7.3/python-3.7.3-amd64.exe
 2. Clone the repository to a folder or download as ZIP - make sure to extract
 3. Install the required python modules needed to run the program (pip install discord, pip install termcolor)
 4. After the installer closes, put your token in the json file and run **cl.py**
-5. In any channel on your account, if you say **!cl** - it will start deleting messages
+5. In any channel on your account, if you say **cl** - it will start deleting messages
 
 ## DO NOT SHARE THE TOKEN
 
