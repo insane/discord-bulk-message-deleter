@@ -2,6 +2,8 @@
 
 discord bulk message deleter with smart ratelimit handling
 
+![image](https://user-images.githubusercontent.com/110794031/234622908-4907fb44-3051-4861-bfe6-abd2395be360.png)
+
 ## Installation:
 
 Install Python:
