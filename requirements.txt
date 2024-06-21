@@ -1,4 +1,4 @@
-pip install discord
-pip install asyncio
-pip install termcolor
-pip install colorama
+py -3.7 -m pip install discord==1.7.3
+py -3.7 -m pip install asyncio
+py -3.7 -m pip install termcolor
+py -3.7 -m pip install colorama
