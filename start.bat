@@ -13,15 +13,15 @@ set /p choice="Enter your choice (1, 2, or 3): "
 
 if "%choice%"=="1" (
     cls
-    py modules/cl.py
+    py -3.7 modules/cl.py
     goto end
 ) else if "%choice%"=="2" (
     cls
-    py modules/silent.py
+    py -3.7 modules/silent.py
     goto end
 ) else if "%choice%"=="3" (
     cls
-    py modules/rsilent.py
+    py -3.7 modules/rsilent.py
     goto end
 ) else (
     echo Invalid choice. Please enter 1, 2, or 3.
