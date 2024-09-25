@@ -11,7 +11,7 @@ https://www.python.org/ftp/python/3.7.3/python-3.7.3-amd64.exe
 
 1. Install Python <3.8 (<b>Make sure you add Python to PATH during installation</b>)
 2. Clone the repository to a folder or download as ZIP - make sure to extract
-3. Open the terminal in the directory you extracted in and install the required python modules needed to run the program by doing **pip install -r requirements.txt**
+3. Open the terminal in the directory you extracted in and install the required python modules needed to run the program by doing **py -3.7 -m pip install -r requirements.txt**
 4. After the installer closes, put your token in the json file and run **start.bat**
 5. You will have 3 prompts to choose from to start deleting!
 
