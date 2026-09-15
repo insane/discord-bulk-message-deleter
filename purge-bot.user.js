@@ -55,7 +55,18 @@
     // Primary source: capture your token from Discord's own API requests. This is
     // decoy-proof and works even when Discord has cleared it from localStorage.
     (function hookToken() {
-        const grab = v => { if (!_token && typeof v === "string" && v.length > 20 && !/^Bot /.test(v)) _token = v; };
+        // A real user token is three url-safe-base64 segments: <id>.<timestamp>.<hmac>.
+        // Discord also sends OAuth "Bearer ..." and "Bot ..." tokens on /api/ requests
+        // (embedded activities, connections, upsells); those are scoped and 401 on your
+        // messages, so we must NOT grab them. Only lock onto the genuine account token.
+        const TOKEN_RE = /^[A-Za-z0-9_-]{10,}\.[A-Za-z0-9_-]{3,}\.[A-Za-z0-9_-]{15,}$/;
+        const grab = v => {
+            if (_token || typeof v !== "string") return;
+            const t = v.trim();
+            if (/^(bot|bearer)\s/i.test(t)) return;
+            if (!TOKEN_RE.test(t)) return;
+            _token = t;
+        };
         // Patch the PAGE's objects (unsafeWindow under Tampermonkey), not the sandbox
         // wrapper, so Discord's own requests actually pass through the hook.
         try {
