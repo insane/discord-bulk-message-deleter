@@ -50,9 +50,11 @@
     // decoy-proof and works even when Discord has cleared it from localStorage.
     (function hookToken() {
         const grab = v => { if (!_token && typeof v === "string" && v.length > 20 && !/^Bot /.test(v)) _token = v; };
+        // Patch the PAGE's objects (unsafeWindow under Tampermonkey), not the sandbox
+        // wrapper, so Discord's own requests actually pass through the hook.
         try {
-            const of = window.fetch;
-            window.fetch = function (input, init) {
+            const of = w.fetch;
+            w.fetch = function (input, init) {
                 try {
                     const url = typeof input === "string" ? input : (input && input.url) || "";
                     if (url.indexOf("/api/") !== -1) {
@@ -64,8 +66,9 @@
             };
         } catch (e) { }
         try {
-            const os = XMLHttpRequest.prototype.setRequestHeader;
-            XMLHttpRequest.prototype.setRequestHeader = function (k, v) {
+            const XHR = (w.XMLHttpRequest && w.XMLHttpRequest.prototype) || XMLHttpRequest.prototype;
+            const os = XHR.setRequestHeader;
+            XHR.setRequestHeader = function (k, v) {
                 try { if (/^authorization$/i.test(k)) grab(v); } catch (e) { }
                 return os.apply(this, arguments);
             };
@@ -187,6 +190,7 @@
         const base = ctx.guildId ? `/guilds/${ctx.guildId}/messages/search` : `/channels/${ctx.channelId}/messages/search`;
         if (onScan) onScan(0, 0);
         const ids = [];
+        const seen = new Set();      // dedup: buckets carry context messages that overlap across pages
         let offset = 0, done = false;
         while (!done && !aborted) {
             if (offset >= 9900) break;
@@ -199,18 +203,22 @@
             if (res.status === 429) { const bd = await res.json().catch(() => ({})); await sleep((Number(bd.retry_after) || 5) * 1000 + 250); continue; }
             if (!res.ok) { log("Search failed (status " + res.status + ")"); break; }
             const data = await res.json().catch(() => null);
-            let msgs = [];
-            if (data && Array.isArray(data.messages)) for (const bk of data.messages) for (const m of bk) msgs.push(m);
-            const mine = msgs.filter(m => m.author && m.author.id === me);
-            if (!mine.length) break;
-            for (const m of mine) {
-                if (untilId && m.id === untilId) { done = true; break; }
-                if (!pass(m)) continue;
-                ids.push(m.id);
+            const buckets = (data && Array.isArray(data.messages)) ? data.messages : [];
+            if (!buckets.length) break;
+            for (const bk of buckets) {
+                for (const m of bk) {
+                    if (!m.author || m.author.id !== me) continue;   // skip context messages from others
+                    if (seen.has(m.id)) continue;                    // stale duplicate across overlapping pages
+                    seen.add(m.id);
+                    if (untilId && m.id === untilId) { done = true; break; }
+                    if (!pass(m)) continue;
+                    ids.push(m.id);
+                }
+                if (done) break;
             }
-            if (onScan) onScan(ids.length, ids.length);
+            if (onScan) onScan(seen.size, ids.length);
             offset += 25;
-            if (mine.length < 25) break;
+            if (buckets.length < 25) break;                          // fewer than a full page of hits: end
         }
         if (opts.oldestFirst) ids.reverse();
         return { channelId: ctx.channelId, ids };
@@ -332,17 +340,21 @@
         return { total: 0, msgs: [] };
     }
 
-    async function globalCount() {
-        const me = await getMyId();
-        // The search index can transiently report 0 right after a purge (reindexing);
-        // retry a few times before trusting a zero.
+    // The search can transiently report 0 (reindexing) or on a failed request; never
+    // trust a single zero — retry a few times before believing it.
+    async function remainingTotal(me, log) {
         let total = 0;
-        for (let i = 0; i < 3 && !aborted; i++) {
-            total = (await globalSearchPage(me, 0, null)).total;
-            if (total > 0) break;
+        for (let i = 0; i < 4 && !aborted; i++) {
+            total = (await globalSearchPage(me, 0, log)).total;
+            if (total > 0) return total;
             await sleep(1800);
         }
         return total;
+    }
+
+    async function globalCount() {
+        const me = await getMyId();
+        return remainingTotal(me, null);
     }
 
     async function globalPurge(opts, { onProgress, onScan, log }) {
@@ -353,7 +365,7 @@
         const rl = { hits: 0 };
         const seen = new Set();
         let offset = 0, deleted = 0, skipped = 0;
-        let remaining = (await globalSearchPage(me, 0, log)).total || 0;
+        let remaining = await remainingTotal(me, log);
         const initialTotal = remaining;
         const start = Date.now();
         let stall = 0, lastRemaining = Infinity;
@@ -385,7 +397,7 @@
             // No new deletions this page. Ask the search how many of your messages it
             // still reports, and only stop once that count actually stops going down.
             offset += 25;
-            remaining = (await globalSearchPage(me, 0, log)).total || 0;
+            remaining = await remainingTotal(me, log);
             report();
             if (remaining <= 0) break;                       // nothing left
             if (remaining < lastRemaining) stall = 0; else stall++;
@@ -404,6 +416,16 @@
     async function purge(opts = {}) {
         aborted = false;
         const log = typeof opts.onLog === "function" ? opts.onLog : (m => console.log("[PurgeBot] " + m));
+        if (opts.global) {
+            const total = await globalCount();
+            log(`Found ${total} message(s) across your whole account.`);
+            if (opts.dryRun) { log(`[DRY RUN] Would delete ${total}. Nothing deleted.`); return { total }; }
+            if (!total) { log("Nothing to delete."); return { deleted: 0, skipped: 0 }; }
+            const gres = await globalPurge(opts, { log });
+            log(`${aborted ? "Stopped. " : "Done. "}Deleted ${gres.deleted} everywhere (skipped ${gres.skipped}).`);
+            if (!aborted && gres.remaining > 0) log(`~${gres.remaining} may still be indexing; run purge({ global: true }) again in a minute.`);
+            return gres;
+        }
         let scan;
         try { scan = await scanTargets(opts, log, (seen, matched) => { if (seen && seen % 500 === 0) log(`Scanning: ${seen} checked, ${matched} matching`); }); } catch (e) { log(e.message); return; }
         if (!scan.channelId) return;
@@ -848,7 +870,9 @@
                 logLine(`Ready to delete ${n} message(s). This cannot be undone.`);
                 const done = val => { cancelConfirm = null; confirmBtn.remove(); backBtn.remove(); startBtn.style.display = ""; resolve(val); };
                 cancelConfirm = () => done(false);
-                confirmBtn.onclick = () => { stopBtn.style.display = ""; done(true); };
+                // Confirm is the deliberate "go". Clear any Stop that landed during the
+                // scan/confirm phase (e.g. from the minimized pill) so deletion isn't wedged.
+                confirmBtn.onclick = () => { aborted = false; stopBtn.style.display = ""; done(true); };
                 backBtn.onclick = () => done(false);
             });
         }
